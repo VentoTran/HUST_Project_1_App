@@ -21,7 +21,9 @@ namespace Project_1_20202
         private bool runningFlag = false;
 
         string File_Path = "D:/Data/Data.xlsx";
-        string rbuffer = "";
+        public byte[] rbuffer = new byte[17];
+        int count = 0;
+        int devicesIndex = 1;
 
         public string[] data = new string[1001];
 
@@ -62,10 +64,7 @@ namespace Project_1_20202
             Chart.ChartAreas[0].AxisX.Maximum = 60;
 
             Chart.ChartAreas[0].AxisY.Minimum = 0;
-            Chart.ChartAreas[0].AxisY.Maximum = 100;
-
-            //Chart.ChartAreas[0].AxisY2.Minimum = 0;
-            //Chart.ChartAreas[0].AxisY2.Maximum = 100;
+            Chart.ChartAreas[0].AxisY.Maximum = 80;
 
             Save_Path.Text = File_Path;
             Save_Path.SelectAll();
@@ -75,7 +74,7 @@ namespace Project_1_20202
             Run_Time.SelectAll();
             Run_Time.SelectionAlignment = HorizontalAlignment.Center;
 
-            Node.Text = "1";
+            Node.Text = Convert.ToString(devicesIndex);
             Node.SelectAll();
             Node.SelectionAlignment = HorizontalAlignment.Center;
 
@@ -92,10 +91,10 @@ namespace Project_1_20202
                 try
                 {
                     Serial_Port.PortName = COM_BOX.Text;
-                    Serial_Port.BaudRate = 9600;
+                    Serial_Port.BaudRate = 19200;
                     Serial_Port.DataBits = 8;
                     Serial_Port.StopBits = (StopBits)Enum.Parse(typeof(StopBits), "One");
-                    Serial_Port.Parity = (Parity)Enum.Parse(typeof(Parity), "None");
+                    Serial_Port.Parity = (Parity)Enum.Parse(typeof(Parity), "Even");
 
                     Serial_Port.Open();
                     ProgBar1.ForeColor = Color.Lime;
@@ -152,60 +151,65 @@ namespace Project_1_20202
 
         private void Serial_Port_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
-                rbuffer += Serial_Port.ReadExisting();
+            count = Serial_Port.BytesToRead;
+            if (count == 17) 
+            {
+                Serial_Port.Read(rbuffer, 0, count);
+            }
         }
             
-        private void Timer1_Tick(object sender, EventArgs e)
+        private async void Timer1_Tick(object sender, EventArgs e)
         {
-            /*
-            check = false;
-            do
-            {
-                Serial_Port.Write("$");
-                for(int i = 0; i < 50000000; i++)
-                {
 
-                }    
-                if(!rbuffer.Equals("") && (rbuffer.Length == 8))
+            Serial_Port.Write(new byte[] {0x10, 0x04, 0x00, 0x00, 0x00, 0x06, 0x73, 0x49}, 0, 8);
+
+            int milliseconds = 500;
+            await Task.Delay(milliseconds);
+
+            int[] temp = new int[6];
+            if ((rbuffer[0] != 16) || (rbuffer[1] != 4) || (rbuffer[2] != 12))
+            {
+                for (int i = 0; i < 6; i++)
                 {
-                    check = true;
-                }
-                else
-                {
-                    rbuffer = "";    //reset buffer
+                    temp[i] = 0;
                 }
             }
-            while(!check);
-            */
-
-            Serial_Port.Write("$");
-
-            for (int i = 0; i < 1000000; i++);
-
-            if (rbuffer.Equals("") || (rbuffer.Length > 23))
-                rbuffer += Convert.ToString(Temperature1) + ',' + Convert.ToString(Temperature2) + ',' + Convert.ToString(Temperature3) + ',';
-                rbuffer += Convert.ToString(Temperature4) + ',' + Convert.ToString(Temperature5) + ',' + Convert.ToString(Temperature6);
-
-                //Typical response: "xx.x,yy.y,zz.z,aa.a,bb.b,cc.c"
-            string[] temp = new string[6];
-            temp = rbuffer.Split(',');
-            rbuffer = "";    //reset buffer
-
+            else
+            {
+                for (int i = 0; i < 6; i++)
+                {
+                    if (rbuffer[3 + 2*i] != 0)
+                    {
+                        temp[i] = rbuffer[3 + 2*i]*256 + rbuffer[4 + 2*i];
+                    }
+                    else
+                    {
+                        temp[i] = rbuffer[4 + 2*i];
+                    }
+                    
+                }
+            }
+            rbuffer = new byte[17];    //reset buffer
 
             try
             {
                 if (Cont.Checked)
                 {
-                    Temperature1 = Convert.ToDouble(temp[0]);
-                    Temperature2 = Convert.ToDouble(temp[1]);
-                    Temperature3 = Convert.ToDouble(temp[2]);
-                    Temperature4 = Convert.ToDouble(temp[3]);
-                    Temperature5 = Convert.ToDouble(temp[4]);
-                    Temperature6 = Convert.ToDouble(temp[5]);
-                    //Humidity = Convert.ToInt16(temp[1]);
+                    Temperature1 = Convert.ToDouble(temp[0]) / 10;
+                    Temperature2 = Convert.ToDouble(temp[1]) / 10;
+                    Temperature3 = Convert.ToDouble(temp[2]) / 10;
+                    Temperature4 = Convert.ToDouble(temp[3]) / 10;
+                    Temperature5 = Convert.ToDouble(temp[4]) / 10;
+                    Temperature6 = Convert.ToDouble(temp[5]) / 10;
                     data[Index] = Convert.ToString(Time) + " " + Convert.ToString(Temperature1) + " " + Convert.ToString(Temperature2) + " " + Convert.ToString(Temperature3) + " " + Convert.ToString(Temperature4) + " " + Convert.ToString(Temperature5) + " " + Convert.ToString(Temperature6);
-                    Temp_Box.Text = Convert.ToString(Convert.ToDouble(temp[Convert.ToInt16(Node.Text) - 1])) + " C";
-                    //Humd_Box.Text = Convert.ToString(Humidity) + " %";
+                    if (String.Compare(Node.Text, "\0") == 0)
+                    {
+                        Temp_Box.Text = "";
+                    }
+                    else
+                    {
+                        Temp_Box.Text = Convert.ToString(Convert.ToDouble(temp[Convert.ToInt16(Node.Text) - 1]) / 10) + " C";
+                    }
                     Run_Time.Text = Convert.ToString(Time) + "s";
                     Chart.Series["Temperature1"].Points.AddXY(Time, Temperature1);
                     Chart.Series["Temperature2"].Points.AddXY(Time, Temperature2);
@@ -213,21 +217,18 @@ namespace Project_1_20202
                     Chart.Series["Temperature4"].Points.AddXY(Time, Temperature4);
                     Chart.Series["Temperature5"].Points.AddXY(Time, Temperature5);
                     Chart.Series["Temperature6"].Points.AddXY(Time, Temperature6);
-                    //Chart.Series["Humidity"].Points.AddXY(Time, Humidity);
                     Data_Table.Rows.Insert(0, Convert.ToString(Time), Convert.ToString(Temperature1), Convert.ToString(Temperature2), Convert.ToString(Temperature3), Convert.ToString(Temperature4), Convert.ToString(Temperature5), Convert.ToString(Temperature6));
                     Index++;
                 }
                 else if (Selec.Checked)
                 {
-                    Temperature1 = Convert.ToDouble(temp[0]);
-                    Temperature2 = Convert.ToDouble(temp[1]);
-                    Temperature3 = Convert.ToDouble(temp[2]);
-                    Temperature4 = Convert.ToDouble(temp[3]);
-                    Temperature5 = Convert.ToDouble(temp[4]);
-                    Temperature6 = Convert.ToDouble(temp[5]);
-                    //Humidity = Convert.ToInt16(Convert.ToDouble(temp[1]));
-                    Temp_Box.Text = Convert.ToString(Convert.ToDouble(temp[Convert.ToInt16(Node.Text)])) + " C";
-                    //Humd_Box.Text = Convert.ToString(Humidity) + " %";
+                    Temperature1 = Convert.ToDouble(temp[0]) / 10;
+                    Temperature2 = Convert.ToDouble(temp[1]) / 10;
+                    Temperature3 = Convert.ToDouble(temp[2]) / 10;
+                    Temperature4 = Convert.ToDouble(temp[3]) / 10;
+                    Temperature5 = Convert.ToDouble(temp[4]) / 10;
+                    Temperature6 = Convert.ToDouble(temp[5]) / 10;
+                    Temp_Box.Text = Convert.ToString(Convert.ToDouble(temp[Convert.ToInt16(Node.Text)])/10) + " C";
                     Run_Time.Text = Convert.ToString(Time) + "s";
                     Chart.Series["Temperature1"].Points.AddXY(Time, Temperature1);
                     Chart.Series["Temperature2"].Points.AddXY(Time, Temperature2);
@@ -235,7 +236,6 @@ namespace Project_1_20202
                     Chart.Series["Temperature4"].Points.AddXY(Time, Temperature4);
                     Chart.Series["Temperature5"].Points.AddXY(Time, Temperature5);
                     Chart.Series["Temperature6"].Points.AddXY(Time, Temperature6);
-                    //Chart.Series["Humidity"].Points.AddXY(Time, Humidity);
                 }
                 
             }
@@ -250,8 +250,6 @@ namespace Project_1_20202
 
             Temp_Box.SelectAll();
             Temp_Box.SelectionAlignment = HorizontalAlignment.Center;
-            //Humd_Box.SelectAll();
-            //Humd_Box.SelectionAlignment = HorizontalAlignment.Center;
             Run_Time.SelectAll();
             Run_Time.SelectionAlignment = HorizontalAlignment.Center;
 
@@ -271,7 +269,6 @@ namespace Project_1_20202
                 Index = 1000;
             }
 
-            
             Time++;
         }
 
@@ -447,6 +444,18 @@ namespace Project_1_20202
             COM_BOX.Items.Clear();
 
             COM_BOX.Items.AddRange(Ports);
+        }
+
+        private void Node_TextChanged(object sender, EventArgs e)
+        {
+            if (String.Compare(Node.Text, "\0") == 0)
+            {
+
+            }
+            else
+            {
+                devicesIndex = Convert.ToInt16(Node.Text);
+            }
         }
     }
 }
