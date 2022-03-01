@@ -178,6 +178,7 @@ namespace Project_1_20202
             {
                 for (int i = 0; i < 6; i++)
                 {
+                    
                     if (rbuffer[3 + 2*i] != 0)
                     {
                         temp[i] = rbuffer[3 + 2*i]*256 + rbuffer[4 + 2*i];
@@ -186,6 +187,7 @@ namespace Project_1_20202
                     {
                         temp[i] = rbuffer[4 + 2*i];
                     }
+                    if (temp[i] == 32768) { temp[i] = 0; }
                     
                 }
             }
